@@ -2,6 +2,7 @@
 * Mesa SmartSerial (SSLBP) device template project
 *
 * Copyright (C) 2020 Forest Darling <fdarling@gmail.com>
+* Copyright (C) 2025 Oliver Dippel <o.dippel@gmx.de> - doing some changes
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -26,7 +27,8 @@
 #include <stdint.h>
 #pragma pack(push,1)
 
-#define BOARD "wemos_d1_mini32"
+#define BOARD "8ch"
+#define STATUS_LED 23
 #define SSerial Serial2
 
 static const char CARD_NAME[] = "9r01";
@@ -134,7 +136,10 @@ struct LBP_State {
 };
 
 void setup() {
-    //pinMode(LED_BUILTIN, OUTPUT);
+#ifdef STATUS_LED
+    pinMode(STATUS_LED, OUTPUT);
+    digitalWrite(STATUS_LED, LOW);
+#endif
     pinMode(32, OUTPUT); // Output(00)
     pinMode(33, OUTPUT); // Output(01)
     pinMode(25, OUTPUT); // Output(02)
@@ -144,16 +149,17 @@ void setup() {
     pinMode(12, OUTPUT); // Output(06)
     pinMode(13, OUTPUT); // Output(07)
 
-    Serial.begin(9600); // baudrate doesn't matter, full speed USB always
+    Serial.begin(115200);
+    // while (!Serial);
     SSerial.begin(2500000); // 2.5MBps for Mesa Smart Serial
+    // while (!SSerial);
+    SSerial.setTimeout(1);
 }
 
 uint8_t SSerialRead() {
-    // wait for next byte
-    while (!SSerial.available()) {
-        yield();
-    }
-    return SSerial.read();
+    uint8_t data = 0;
+    SSerial.readBytes(&data, 1);
+    return data;
 }
 
 void SSerialWrite(const uint8_t *data, const size_t size) {
@@ -200,8 +206,13 @@ void loop() {
                     }
                 }
                 if (!src) {
-                    Serial.println("<invalid read address 0x%04X>");
-                    return;
+                    Serial.print("invalid read address: ");
+                    Serial.print(lbp_state.address);
+                    Serial.print(" len:");
+                    Serial.println(readLength);
+                    uint8_t zeros[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+                    src = zeros; // do not block invalid reads
+                    //return;
                 }
                 uint8_t RESPONSE[sizeof(uint64_t)+1];
                 memcpy(RESPONSE, src, readLength);
@@ -259,7 +270,9 @@ void loop() {
                     digitalWrite(12, (pdata_in.output & (1<<6)) ? HIGH : LOW);
                     digitalWrite(13, (pdata_in.output & (1<<7)) ? HIGH : LOW);
 
-                    //digitalWriteFast(LED_BUILTIN, (millis() & 0x100) ? HIGH : LOW);
+#ifdef STATUS_LED
+                    digitalWrite(STATUS_LED, (millis() & 0x100) ? HIGH : LOW);
+#endif
                 }
                 break;
                 default: {
